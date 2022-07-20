@@ -1,5 +1,6 @@
 import os
 import sys
+import types
 import shutil
 from pathlib import Path
 import glob
@@ -14,8 +15,9 @@ import log_builder
 LOGGER = log_builder.create_logger("infraformer")
 
 
-def create_backend(base_path, environ, project, region, layer):
-    # layers_list = layer.split("_")[1:]
+def __create_backend(
+    base_path: str, environ: str, project: str, region: str, layer: str
+) -> str:
     environment_path = f"{base_path}/terraform/layers/{layer}/environments/{environ}"
 
     if not os.path.isdir(environment_path):
@@ -38,8 +40,10 @@ project = "{project}"'''
     )
     f.close()
 
+    return environment_path
 
-def create_layer(base_path, environ, project, region, layer):
+
+def create_layer(base_path, environ, project, region, layer) -> str:
     layer_path = f"{base_path}/terraform/layers/{layer}"
 
     if not os.path.isdir(layer_path):
@@ -60,19 +64,26 @@ provider "aws" {{
     )
     f.close()
 
-    # Add this to variables.tf
-    # variable environment {
-    #   type        = string
-    #   description = "The name of the environment"
-    # }
-    #
-    # variable project {
-    #   type        = string
-    #   description = "The name of the project"
-    # }
+    path = f"{layer_path}/variables.tf"
+    f = open(path, "w+")
+    f.write(
+        f"""
+variable environment {{
+  type        = string
+  description = "The name of the environment"
+}}
+
+variable project {{
+  type        = string
+  description = "The name of the project"
+}}
+"""
+    )
+    f.close()
+
     empty_files = [
         f"{layer_path}/main.tf",
-        f"{layer_path}/variables.tf",
+        f"{layer_path}/remote_state.tf",
         f"{layer_path}/outputs.tf",
     ]
     for file in empty_files:
@@ -80,7 +91,9 @@ provider "aws" {{
         f.write("")
         f.close()
 
-    create_backend(base_path, environ, project, region, layer)
+    __create_backend(base_path, environ, project, region, layer)
+
+    return layer_path
 
 
 def create_layers(base_path, environ, project, region):
@@ -139,21 +152,14 @@ def delete_bucket(bucket_name):
 
 def main():
     task = sys.argv[1]
-    environ = "dev"
-    project = "msk"
-    region = "eu-west-1"
-    layer = "15_security"
 
     if task == "create-layer":
-        create_backend("/tmp", environ, project, region, layer)
+        environ = "dev"
+        project = "msk"
+        region = "eu-west-1"
+        layer = "15_security"
+        create_layer("/tmp", environ, project, region, layer)
 
 
 if __name__ == "__main__":
     main()
-
-
-create_layer("/tmp", environ, project, region, layer)
-
-path = f"/tmp/environments/{environ}"
-if not os.path.isdir(path):
-    os.makedirs(path)
