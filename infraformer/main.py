@@ -12,35 +12,40 @@ sys.path.insert(0, "infraformer")
 import log_builder
 
 LOGGER = log_builder.create_logger("infraformer")
-environ = "dev"
-project = "msk"
-region = "eu-west-1"
-layer = "15_security"
+
 
 def create_backend(base_path, environ, project, region, layer):
-    layers_list = layer.split("_")[1:]
+    # layers_list = layer.split("_")[1:]
+    environment_path = f"{base_path}/terraform/layers/{layer}/environments/{environ}"
+
+    if not os.path.isdir(environment_path):
+        os.makedirs(environment_path)
+
     body = f"""bucket = "{project}-{environ}-terraform-state"
-key = "{environ}/{'-'.join(layers_list)}/terraform.tfstate"
-session_name = "{'-'.join(layers_list)}"
+key = "{environ}/{layer}/terraform.tfstate"
+session_name = "{layer}"
 dynamodb_table = "msk-dev-terraform-state-lock"
 region = "{region}"
 encrypt = true"""
+    f = open(f"{environment_path}/backend.generated.tfvars", "w+")
+    f.write(body)
+    f.close()
 
-    path = f"{base_path}/environments/{environ}"
-    if not os.path.isdir(path):
-        os.makedirs(path)
-    f = open(f"{path}/terraform.tfvars", "w+")
+    f = open(f"{environment_path}/terraform.tfvars", "w+")
     f.write(
         f'''environment = "{environ}"
 project = "{project}"'''
     )
     f.close()
 
-    f = open(f"{path}/backend.generated.tfvars", "w+")
-    f.write(body)
-    f.close()
 
-    path = f"terraform/layers/{layer}/terraform.tf"
+def create_layer(base_path, environ, project, region, layer):
+    layer_path = f"{base_path}/terraform/layers/{layer}"
+
+    if not os.path.isdir(layer_path):
+        os.makedirs(layer_path)
+
+    path = f"{layer_path}/terraform.tf"
     f = open(path, "w+")
     f.write(
         f"""terraform {{
@@ -50,7 +55,8 @@ project = "{project}"'''
 
 provider "aws" {{
   region = "{region}"
-}}"""
+}}
+"""
     )
     f.close()
 
@@ -65,24 +71,20 @@ provider "aws" {{
     #   description = "The name of the project"
     # }
     empty_files = [
-        f"terraform/layers/{layer}/main.tf",
-        f"terraform/layers/{layer}/variables.tf",
-        f"terraform/layers/{layer}/outputs.tf",
+        f"{layer_path}/main.tf",
+        f"{layer_path}/variables.tf",
+        f"{layer_path}/outputs.tf",
     ]
     for file in empty_files:
         f = open(file, "a")
         f.write("")
         f.close()
 
+    create_backend(base_path, environ, project, region, layer)
+
 
 def create_layers(base_path, environ, project, region):
-    layers = [
-        "07_secrets",
-        "10_network",
-        "18_database",
-        "30_compute",
-        "40_frontend"
-    ]
+    layers = ["07_secrets", "10_network", "18_database", "30_compute", "40_frontend"]
 
     for layer in layers:
         path = f"{base_path}/{layer}"
@@ -90,8 +92,6 @@ def create_layers(base_path, environ, project, region):
             os.makedirs(path)
             create_backend(path, environ, project, region, layer)
 
-base_path = "terraform/layers"
-create_layers(base_path, environ, project, region)
 
 def remove_layers(layers):
     [shutil.rmtree(f"{base_path}/{l}") for l in layers]
@@ -139,14 +139,21 @@ def delete_bucket(bucket_name):
 
 def main():
     task = sys.argv[1]
+    environ = "dev"
+    project = "msk"
+    region = "eu-west-1"
+    layer = "15_security"
 
     if task == "create-layer":
-        create_backend()
+        create_backend("/tmp", environ, project, region, layer)
 
 
 if __name__ == "__main__":
     main()
 
 
+create_layer("/tmp", environ, project, region, layer)
 
-create_backend(path, environ, project, region, layer)
+path = f"/tmp/environments/{environ}"
+if not os.path.isdir(path):
+    os.makedirs(path)
