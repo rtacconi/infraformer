@@ -8,12 +8,32 @@ import re
 import boto3
 from botocore.config import Config
 import botocore
-from jinja2 import Environment, BaseLoader
+from jinja2 import Environment, BaseLoader, PackageLoader, select_autoescape
 
 sys.path.insert(0, "infraformer")
 import log_builder
 
 LOGGER = log_builder.create_logger("infraformer")
+JINJAENV = Environment(
+    loader=PackageLoader("infraformer"), autoescape=select_autoescape()
+)
+
+
+def create_project(base_path) -> str:
+    terraform_path = f"{base_path}/terraform"
+
+    dirs = [terraform_path, f"{terraform_path}/modules", f"{terraform_path}/layers"]
+
+    for dir in dirs:
+        if not os.path.isdir(dir):
+            os.makedirs(dir)
+
+    f = open(f"{base_path}/Makefile", "w+")
+    f.write(JINJAENV.get_template("Makefile").render())
+    f.close()
+    f = open(f"{base_path}/.gitignore", "w+")
+    f.write(JINJAENV.get_template(".gitignore").render())
+    f.close()
 
 
 def __create_backend(template_vars) -> str:
@@ -28,7 +48,7 @@ def __create_backend(template_vars) -> str:
     dynamodb_table = "msk-dev-terraform-state-lock"
     region = "{{v.region}}"
     encrypt = true"""
-    rtemplate = Environment(loader=BaseLoader).from_string(body)
+    rtemplate = JINJAENV.from_string(body)
     rendered_body = rtemplate.render(v=template_vars)
     f = open(f"{environment_path}/backend.generated.tfvars", "w+")
     f.write(rendered_body)
@@ -36,8 +56,8 @@ def __create_backend(template_vars) -> str:
 
     f = open(f"{environment_path}/terraform.tfvars", "w+")
     f.write(
-        f'''environment = "{environ}"
-project = "{project}"'''
+        f'''environment = "{template_vars['environ']}"
+project = "{template_vars['project']}"'''
     )
     f.close()
 
@@ -46,11 +66,11 @@ project = "{project}"'''
 
 def create_layer(base_path, environ, project, region, layer) -> str:
     v = {
-        'base_path': base_path,
-        'environ':environ,
-        'project':project,
-        'region':region,
-        'layer':layer
+        "base_path": base_path,
+        "environ": environ,
+        "project": project,
+        "region": region,
+        "layer": layer,
     }
     layer_path = f"{base_path}/terraform/layers/{layer}"
 
@@ -167,6 +187,7 @@ def main():
         region = "eu-west-1"
         layer = "15_security"
         create_layer("/tmp", environ, project, region, layer)
+        create_project("/tmp/infra")
 
 
 if __name__ == "__main__":
