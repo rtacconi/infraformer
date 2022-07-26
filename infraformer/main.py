@@ -187,7 +187,6 @@ def main():
         region = "eu-west-1"
         layer = "15_security"
         create_layer("/tmp", environ, project, region, layer)
-        create_project("/tmp/infra")
 
 
 if __name__ == "__main__":
