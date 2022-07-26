@@ -8,6 +8,7 @@ import re
 import boto3
 from botocore.config import Config
 import botocore
+from jinja2 import Environment, BaseLoader
 
 sys.path.insert(0, "infraformer")
 import log_builder
@@ -15,22 +16,22 @@ import log_builder
 LOGGER = log_builder.create_logger("infraformer")
 
 
-def __create_backend(
-    base_path: str, environ: str, project: str, region: str, layer: str
-) -> str:
-    environment_path = f"{base_path}/terraform/layers/{layer}/environments/{environ}"
+def __create_backend(template_vars) -> str:
+    environment_path = f"{template_vars['base_path']}/terraform/layers/{template_vars['layer']}/environments/{template_vars['environ']}"
 
     if not os.path.isdir(environment_path):
         os.makedirs(environment_path)
 
-    body = f"""bucket = "{project}-{environ}-terraform-state"
-key = "{environ}/{layer}/terraform.tfstate"
-session_name = "{layer}"
-dynamodb_table = "msk-dev-terraform-state-lock"
-region = "{region}"
-encrypt = true"""
+    body = """bucket = "{{v.project}}-{{v.environ}}-terraform-state"
+    key = "{{v.environ}}/{{v.layer}}/terraform.tfstate"
+    session_name = "{{v.layer}}"
+    dynamodb_table = "msk-dev-terraform-state-lock"
+    region = "{{v.region}}"
+    encrypt = true"""
+    rtemplate = Environment(loader=BaseLoader).from_string(body)
+    rendered_body = rtemplate.render(v=template_vars)
     f = open(f"{environment_path}/backend.generated.tfvars", "w+")
-    f.write(body)
+    f.write(rendered_body)
     f.close()
 
     f = open(f"{environment_path}/terraform.tfvars", "w+")
@@ -44,6 +45,13 @@ project = "{project}"'''
 
 
 def create_layer(base_path, environ, project, region, layer) -> str:
+    v = {
+        'base_path': base_path,
+        'environ':environ,
+        'project':project,
+        'region':region,
+        'layer':layer
+    }
     layer_path = f"{base_path}/terraform/layers/{layer}"
 
     if not os.path.isdir(layer_path):
@@ -91,7 +99,7 @@ variable project {{
         f.write("")
         f.close()
 
-    __create_backend(base_path, environ, project, region, layer)
+    __create_backend(v)
 
     return layer_path
 
