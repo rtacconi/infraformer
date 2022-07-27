@@ -78,35 +78,37 @@ def create_layer(base_path, environ, project, region, layer) -> str:
         os.makedirs(layer_path)
 
     path = f"{layer_path}/terraform.tf"
-    f = open(path, "w+")
-    f.write(
-        f"""terraform {{
-  required_version = "~> 1.0.6"
-  backend "s3" {{}}
-}}
+    body ="""terraform {{
+    required_version = "~> 1.0.6"
+    backend "s3" {{}}
+    }}
 
-provider "aws" {{
-  region = "{region}"
-}}
-"""
-    )
+    provider "aws" {{
+    region = "{{region}}"
+    }}
+    """
+    rtemplate = JINJAENV.from_string(body)
+    rendered_body = rtemplate.render(v=template_vars)
+    path = f"{layer_path}/variables.tf"
+    f.write(rendered_body)
     f.close()
 
-    path = f"{layer_path}/variables.tf"
-    f = open(path, "w+")
-    f.write(
-        f"""
-variable environment {{
-  type        = string
-  description = "The name of the environment"
-}}
+    body =  f"""
+    variable environment {{
+    type        = string
+    description = "The name of the environment"
+    }}
 
-variable project {{
-  type        = string
-  description = "The name of the project"
-}}
-"""
-    )
+    variable project {{
+    type        = string
+    description = "The name of the project"
+    }}
+    """
+
+    rtemplate = JINJAENV.from_string(body)
+    rendered_body = rtemplate.render(v=template_vars)
+    path = f"{layer_path}/variables.tf"
+    f.write(rendered_body)
     f.close()
 
     empty_files = [
