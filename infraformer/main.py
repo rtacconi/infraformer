@@ -29,7 +29,7 @@ def create_project(name) -> str:
             os.makedirs(dir)
 
     f = open(f"{name}/Makefile", "w+")
-    f.write(JINJAENV.get_template("Makefile").render())
+    f.write(JINJAENV.get_template("Makefile").render(project=name))
     f.close()
     f = open(f"{name}/.gitignore", "w+")
     f.write(JINJAENV.get_template(".gitignore").render())
