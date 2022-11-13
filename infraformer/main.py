@@ -64,32 +64,24 @@ project = "{template_vars['project']}"'''
     return environment_path
 
 
-def create_stack(base_path, environ, project, region, layer) -> str:
-    v = {
-        "base_path": base_path,
-        "environ": environ,
-        "project": project,
-        "region": region,
-        "layer": layer,
-    }
-    layer_path = f"{base_path}/terraform/layers/{layer}"
+def create_stack(base_path, stack, environ, region) -> str:
+    stack_path = f"{base_path}/terraform/{stack}"
 
-    if not os.path.isdir(layer_path):
-        os.makedirs(layer_path)
+    if not os.path.isdir(stack_path):
+        os.makedirs(stack_path)
 
-    path = f"{layer_path}/terraform.tf"
-    body = """terraform {{
+    body = """terraform {
     required_version = "~> 1.0.6"
-    backend "s3" {{}}
-    }}
+    backend "s3" {}
+    }
 
-    provider "aws" {{
+    provider "aws" {
     region = "{{region}}"
-    }}
+    }
     """
     rtemplate = JINJAENV.from_string(body)
-    rendered_body = rtemplate.render(v=template_vars)
-    path = f"{layer_path}/variables.tf"
+    rendered_body = rtemplate.render(region=region)
+    f = open(f"{stack_path}/terraform.tf", "w+")
     f.write(rendered_body)
     f.close()
 
@@ -104,26 +96,26 @@ def create_stack(base_path, environ, project, region, layer) -> str:
     description = "The name of the project"
     }}
     """
-
     rtemplate = JINJAENV.from_string(body)
-    rendered_body = rtemplate.render(v=template_vars)
-    path = f"{layer_path}/variables.tf"
+    rendered_body = rtemplate.render()
+    f = open(f"{stack_path}/variables.tf", "w+")
     f.write(rendered_body)
     f.close()
 
+
     empty_files = [
-        f"{layer_path}/main.tf",
-        f"{layer_path}/remote_state.tf",
-        f"{layer_path}/outputs.tf",
+        f"{stack_path}/main.tf",
+        f"{stack_path}/remote_state.tf",
+        f"{stack_path}/outputs.tf",
     ]
     for file in empty_files:
         f = open(file, "a")
         f.write("")
         f.close()
 
-    __create_backend(v)
+    #__create_backend(v)
 
-    return layer_path
+    return stack_path
 
 
 def create_stacks(base_path, environ, project, region):
@@ -133,7 +125,7 @@ def create_stacks(base_path, environ, project, region):
         path = f"{base_path}/{layer}"
         if not os.path.isdir(path):
             os.makedirs(path)
-            create_backend(path, environ, project, region, layer)
+            __create_backend(path, environ, project, region, layer)
 
 
 def remove_layers(layers):
@@ -184,6 +176,7 @@ def main():
     verb = sys.argv[1]
     command = sys.argv[2]
     name = sys.argv[3]
+    base_path = path.dirname(os.path.realpath(__file__))
     # print("Params: ", verb, command, name)
 
     if command == "project":
@@ -193,8 +186,8 @@ def main():
     if command == "stack":
         if verb == "create":
             print(sys.argv)
-            __create_backend(name, sys.argv[3], sys.argv[4])
-
+            # __create_backend(name, sys.argv[3], sys.argv[4])
+            create_stack(base_path, environ, region, layer)
 
 if __name__ == "__main__":
     main()
