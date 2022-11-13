@@ -10,28 +10,28 @@ from botocore.config import Config
 import botocore
 from jinja2 import Environment, BaseLoader, PackageLoader, select_autoescape
 
-sys.path.insert(0, "infraformer")
-import log_builder
-
-LOGGER = log_builder.create_logger("infraformer")
+# sys.path.insert(0, "infraformer")
+# import log_builder
+#
+# LOGGER = log_builder.create_logger("infraformer")
 JINJAENV = Environment(
     loader=PackageLoader("infraformer"), autoescape=select_autoescape()
 )
 
 
-def create_project(base_path) -> str:
-    terraform_path = f"{base_path}/terraform"
+def create_project(name) -> str:
+    terraform_path = f"{name}/terraform"
 
-    dirs = [terraform_path, f"{terraform_path}/modules", f"{terraform_path}/layers"]
+    dirs = [terraform_path, f"{terraform_path}/modules"]
 
     for dir in dirs:
         if not os.path.isdir(dir):
             os.makedirs(dir)
 
-    f = open(f"{base_path}/Makefile", "w+")
+    f = open(f"{name}/Makefile", "w+")
     f.write(JINJAENV.get_template("Makefile").render())
     f.close()
-    f = open(f"{base_path}/.gitignore", "w+")
+    f = open(f"{name}/.gitignore", "w+")
     f.write(JINJAENV.get_template(".gitignore").render())
     f.close()
 
@@ -64,7 +64,7 @@ project = "{template_vars['project']}"'''
     return environment_path
 
 
-def create_layer(base_path, environ, project, region, layer) -> str:
+def create_stack(base_path, environ, project, region, layer) -> str:
     v = {
         "base_path": base_path,
         "environ": environ,
@@ -78,7 +78,7 @@ def create_layer(base_path, environ, project, region, layer) -> str:
         os.makedirs(layer_path)
 
     path = f"{layer_path}/terraform.tf"
-    body ="""terraform {{
+    body = """terraform {{
     required_version = "~> 1.0.6"
     backend "s3" {{}}
     }}
@@ -93,7 +93,7 @@ def create_layer(base_path, environ, project, region, layer) -> str:
     f.write(rendered_body)
     f.close()
 
-    body =  f"""
+    body = f"""
     variable environment {{
     type        = string
     description = "The name of the environment"
@@ -126,7 +126,7 @@ def create_layer(base_path, environ, project, region, layer) -> str:
     return layer_path
 
 
-def create_layers(base_path, environ, project, region):
+def create_stacks(base_path, environ, project, region):
     layers = ["07_secrets", "10_network", "18_database", "30_compute", "40_frontend"]
 
     for layer in layers:
@@ -181,14 +181,19 @@ def delete_bucket(bucket_name):
 
 
 def main():
-    task = sys.argv[1]
+    verb = sys.argv[1]
+    command = sys.argv[2]
+    name = sys.argv[3]
+    # print("Params: ", verb, command, name)
 
-    if task == "create-layer":
-        environ = "dev"
-        project = "msk"
-        region = "eu-west-1"
-        layer = "15_security"
-        create_layer("/tmp", environ, project, region, layer)
+    if command == "project":
+        if verb == "create":
+            create_project(name)
+
+    if command == "stack":
+        if verb == "create":
+            print(sys.argv)
+            __create_backend(name, sys.argv[3], sys.argv[4])
 
 
 if __name__ == "__main__":
