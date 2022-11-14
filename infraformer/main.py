@@ -28,38 +28,39 @@ def create_project(name) -> str:
         if not os.path.isdir(dir):
             os.makedirs(dir)
 
-    f = open(f"{name}/Makefile", "w+")
-    f.write(JINJAENV.get_template("Makefile").render(project=name))
-    f.close()
-    f = open(f"{name}/.gitignore", "w+")
-    f.write(JINJAENV.get_template(".gitignore").render())
-    f.close()
+    with open(f"{name}/Makefile", "w+") as f:
+        f.write(JINJAENV.get_template("Makefile").render(project=name))
+
+    with open(f"{name}/.gitignore", "w+") as f:
+        f.write(JINJAENV.get_template(".gitignore").render())
 
 
-def __create_backend(template_vars) -> str:
-    environment_path = f"{template_vars['base_path']}/terraform/layers/{template_vars['layer']}/environments/{template_vars['environ']}"
+#template_vars was a dictionary containing all the variables
+def __create_backend(base_path, stack, environ, region, project) -> str:
+    environment_path = f"{base_path}/terraform/{stack}/environments/{environ}"
 
     if not os.path.isdir(environment_path):
         os.makedirs(environment_path)
 
-    body = """bucket = "{{v.project}}-{{v.environ}}-terraform-state"
-    key = "{{v.environ}}/{{v.layer}}/terraform.tfstate"
-    session_name = "{{v.layer}}"
-    dynamodb_table = "msk-dev-terraform-state-lock"
-    region = "{{v.region}}"
-    encrypt = true"""
+    session_name = "{}_{}".format(stack.replace("/", "_").replace("-", "_"), environ)
+    body = """bucket = "{{project}}-{{environ}}-terraform-state"
+key = "{{stack}}/terraform.tfstate"
+session_name = "{{session_name}}"
+dynamodb_table = "{{project}}-{{environ}}-terraform-state-lock"
+region = "{{region}}"
+encrypt = true"""
     rtemplate = JINJAENV.from_string(body)
-    rendered_body = rtemplate.render(v=template_vars)
-    f = open(f"{environment_path}/backend.generated.tfvars", "w+")
-    f.write(rendered_body)
-    f.close()
+    rendered_body = rtemplate.render(project=project, environ=environ,\
+     stack=stack, session_name=session_name, region=region)
 
-    f = open(f"{environment_path}/terraform.tfvars", "w+")
-    f.write(
-        f'''environment = "{template_vars['environ']}"
-project = "{template_vars['project']}"'''
-    )
-    f.close()
+    with open(f"{environment_path}/backend.generated.tfvars", "w+") as f:
+        f.write(rendered_body)
+
+    with open(f"{environment_path}/terraform.tfvars", "w+") as f:
+        f.write(
+            f'''environment = "{environ}"
+project = "{project}"'''
+        )
 
     return environment_path
 
@@ -71,36 +72,30 @@ def create_stack(base_path, stack, environ, region) -> str:
         os.makedirs(stack_path)
 
     body = """terraform {
-    required_version = "~> 1.0.6"
-    backend "s3" {}
+  required_version = "~> 1.3.4"
+  backend "s3" {}
     }
 
     provider "aws" {
     region = "{{region}}"
-    }
-    """
-    rtemplate = JINJAENV.from_string(body)
-    rendered_body = rtemplate.render(region=region)
-    f = open(f"{stack_path}/terraform.tf", "w+")
-    f.write(rendered_body)
-    f.close()
+}"""
+    rtemplate = JINJAENV.from_string(body).render(region=region)
+    with open(f"{stack_path}/terraform.tf", "w+") as f:
+        f.write(rtemplate)
 
-    body = f"""
-    variable environment {{
-    type        = string
-    description = "The name of the environment"
-    }}
+    body = """variable environment {
+  type        = string
+  description = "The name of the environment"
+}
 
-    variable project {{
-    type        = string
-    description = "The name of the project"
-    }}
-    """
+variable project {
+  type        = string
+  description = "The name of the project"
+}"""
     rtemplate = JINJAENV.from_string(body)
     rendered_body = rtemplate.render()
-    f = open(f"{stack_path}/variables.tf", "w+")
-    f.write(rendered_body)
-    f.close()
+    with open(f"{stack_path}/variables.tf", "w+") as f:
+        f.write(rendered_body)
 
 
     empty_files = [
@@ -108,12 +103,10 @@ def create_stack(base_path, stack, environ, region) -> str:
         f"{stack_path}/remote_state.tf",
         f"{stack_path}/outputs.tf",
     ]
-    for file in empty_files:
-        f = open(file, "a")
-        f.write("")
-        f.close()
 
-    #__create_backend(v)
+    for file in empty_files:
+        with open(file, "a+") as f:
+            f.write("")
 
     return stack_path
 
@@ -125,7 +118,7 @@ def create_stacks(base_path, environ, project, region):
         path = f"{base_path}/{layer}"
         if not os.path.isdir(path):
             os.makedirs(path)
-            __create_backend(path, environ, project, region, layer)
+            __create_backend(path, environ, project, region, layer)#only takes one paramater
 
 
 def remove_layers(layers):
