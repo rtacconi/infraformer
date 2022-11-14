@@ -8,7 +8,7 @@ import re
 import boto3
 from botocore.config import Config
 import botocore
-from jinja2 import Environment, BaseLoader, PackageLoader, select_autoescape
+from jinja2 import Environment, BaseLoader, PackageLoader, select_autoescape, FileSystemLoader
 
 # sys.path.insert(0, "infraformer")
 # import log_builder
@@ -50,8 +50,8 @@ dynamodb_table = "{{project}}-{{environ}}-terraform-state-lock"
 region = "{{region}}"
 encrypt = true"""
     rtemplate = JINJAENV.from_string(body)
-    rendered_body = rtemplate.render(project=project, environ=environ,\
-     stack=stack, session_name=session_name, region=region)
+    rendered_body = rtemplate.render(project=project, environ=environ,
+        stack=stack, session_name=session_name, region=region)
 
     with open(f"{environment_path}/backend.generated.tfvars", "w+") as f:
         f.write(rendered_body)
@@ -71,31 +71,11 @@ def create_stack(base_path, stack, environ, region) -> str:
     if not os.path.isdir(stack_path):
         os.makedirs(stack_path)
 
-    body = """terraform {
-  required_version = "~> 1.3.4"
-  backend "s3" {}
-    }
+    with open(f"{base_path}/terraform.tf", "w+") as f:
+        f.write(JINJAENV.get_template('terraform.tf.j2').render(region=region))
 
-    provider "aws" {
-    region = "{{region}}"
-}"""
-    rtemplate = JINJAENV.from_string(body).render(region=region)
-    with open(f"{stack_path}/terraform.tf", "w+") as f:
-        f.write(rtemplate)
-
-    body = """variable environment {
-  type        = string
-  description = "The name of the environment"
-}
-
-variable project {
-  type        = string
-  description = "The name of the project"
-}"""
-    rtemplate = JINJAENV.from_string(body)
-    rendered_body = rtemplate.render()
-    with open(f"{stack_path}/variables.tf", "w+") as f:
-        f.write(rendered_body)
+    with open(f"{base_path}/variables.tf", "w+") as f:
+        f.write(JINJAENV.get_template('variables.tf.j2').render())
 
 
     empty_files = [
@@ -111,15 +91,13 @@ variable project {
     return stack_path
 
 
-def create_stacks(base_path, environ, project, region):
-    layers = ["07_secrets", "10_network", "18_database", "30_compute", "40_frontend"]
-
-    for layer in layers:
-        path = f"{base_path}/{layer}"
+def create_stacks(base_path, stacks, environ, region):
+    for stack in stacks:
+        path = f"{base_path}/{stack}"
         if not os.path.isdir(path):
             os.makedirs(path)
-            __create_backend(path, environ, project, region, layer)#only takes one paramater
 
+        create_stack(base_path, stack, environ, region)
 
 def remove_layers(layers):
     [shutil.rmtree(f"{base_path}/{l}") for l in layers]

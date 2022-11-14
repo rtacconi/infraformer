@@ -70,3 +70,7 @@ def test_create_backend():
     content = open(f"{p}/backend.generated.tfvars", "r").read()
 
     assert "infraformer-dev-terraform-state" in content
+
+def test_create_stacks():
+    stacks = ["07_secrets", "10_network", "18_database", "30_compute", "40_frontend"]
+    result = infra.create_stacks(BASE_DIR, stacks, "dev", "eu-west-2")
